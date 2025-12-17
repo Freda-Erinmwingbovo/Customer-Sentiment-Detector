@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — Customer Sentiment & Emotion Detector (App #2)
+# app.py — Customer Sentiment & Emotion Detector (App #2) — FIXED
 # Part of AI-Powered Customer Support Automation Suite
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
@@ -8,6 +8,7 @@ import pandas as pd
 import joblib
 import os
 import numpy as np
+import re  # ← Added missing import
 from datetime import datetime, timezone, timedelta
 import streamlit.components.v1 as components
 
@@ -31,10 +32,10 @@ model = load_sentiment_model()
 
 # ------------------------- CLEAN_TEXT FUNCTION (DIRECTLY DEFINED) -------------------------
 def clean_text(t):
-    if pd.isna(t):
+    if pd.isna(t):  # ← Now pd is imported
         return ""
     t = str(t).lower()
-    t = re.sub(r"[^a-z0-9\s]", " ", t)
+    t = re.sub(r"[^a-z0-9\s]", " ", t)  # ← Now re is imported
     t = re.sub(r"\s+", " ", t).strip()
     stop_words = {
         "a", "an", "the", "and", "or", "is", "are", "was", "were", "in", "on", "at", "to", "for", "with", "of",
