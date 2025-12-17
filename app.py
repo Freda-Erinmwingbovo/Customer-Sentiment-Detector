@@ -142,17 +142,19 @@ with tab1:
 with tab2:
     st.header("Detection History")
     log_df = safe_read_log()
-    if len(log_df) > 0:
+    if len(log_df) > 0 and "timestamp" in log_df.columns:
         display_df = log_df.copy()
         display_df["Time"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%H:%M")
         display_df["Sentiment"] = display_df["sentiment"].str.upper()
-        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
+        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}" if pd.notna(x) else "N/A")
         display_df["Action"] = display_df["action"].str.split(" → ").str[0]
-        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(x) > 60 else x)
+        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(str(x)) > 60 else str(x))
         
-        # Reorder columns and sort by timestamp (now guaranteed to exist)
-        display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
+        # Sort by timestamp BEFORE selecting columns
         display_df = display_df.sort_values(by="timestamp", ascending=False)
+        
+        # Now select display columns
+        display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
 
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
