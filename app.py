@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — Customer Sentiment & Emotion Detector (App #2) — FIXED
+# app.py — Customer Sentiment & Emotion Detector (App #2)
 # Part of AI-Powered Customer Support Automation Suite
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
@@ -8,7 +8,7 @@ import pandas as pd
 import joblib
 import os
 import numpy as np
-import re  # ← Added missing import
+import re
 from datetime import datetime, timezone, timedelta
 import streamlit.components.v1 as components
 
@@ -25,17 +25,16 @@ st.set_page_config(
 # ------------------------- MODEL LOADING -------------------------
 @st.cache_resource
 def load_sentiment_model():
-    model = joblib.load("sentiment_classifier_PROD.pkl")
-    return model
+    return joblib.load("sentiment_classifier_PROD.pkl")
 
 model = load_sentiment_model()
 
-# ------------------------- CLEAN_TEXT FUNCTION (DIRECTLY DEFINED) -------------------------
+# ------------------------- CLEAN_TEXT FUNCTION -------------------------
 def clean_text(t):
-    if pd.isna(t):  # ← Now pd is imported
+    if pd.isna(t):
         return ""
     t = str(t).lower()
-    t = re.sub(r"[^a-z0-9\s]", " ", t)  # ← Now re is imported
+    t = re.sub(r"[^a-z0-9\s]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     stop_words = {
         "a", "an", "the", "and", "or", "is", "are", "was", "were", "in", "on", "at", "to", "for", "with", "of",
@@ -45,10 +44,7 @@ def clean_text(t):
     }
     return " ".join(w for w in t.split() if w not in stop_words)
 
-# ------------------------- SESSION STATE & LOGGING -------------------------
-if "history" not in st.session_state:
-    st.session_state.history = []
-
+# ------------------------- LOGGING SETUP -------------------------
 LOG_FILE = "data/sentiment_log.csv"
 os.makedirs("data", exist_ok=True)
 
@@ -63,37 +59,28 @@ def safe_read_log():
 def save_and_log(message, sentiment, confidence, action):
     now = datetime.now(WAT)
     log_df = safe_read_log()
-    new_row = {
+    new_row = pd.DataFrame([{
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "message_snippet": message[:100],
         "sentiment": sentiment,
         "confidence": round(confidence, 4),
         "action": action
-    }
-    log_df = pd.concat([log_df, pd.DataFrame([new_row])], ignore_index=True)
+    }])
+    log_df = pd.concat([log_df, new_row], ignore_index=True)
     log_df.to_csv(LOG_FILE, index=False)
-    
-    st.session_state.history.append({
-        "Time": now.strftime("%H:%M"),
-        "Message": message[:60] + "..." if len(message) > 60 else message,
-        "Sentiment": sentiment.upper(),
-        "Confidence": f"{confidence:.1%}",
-        "Action": action.split(" → ")[0]
-    })
 
 # ------------------------- PREDICTION FUNCTION -------------------------
 def predict_sentiment(message, threshold):
     if not message.strip():
         return None
-    
+
     cleaned = clean_text(message)
     decision_scores = model.decision_function([cleaned])
     exp_scores = np.exp(decision_scores - decision_scores.max())
     proba = exp_scores / exp_scores.sum()
     confidence = float(proba.max())
-    pred_idx = proba.argmax()
-    sentiment = model.classes_[pred_idx]
-    
+    sentiment = model.classes_[proba.argmax()]
+
     auto = confidence >= threshold
     if auto and sentiment == "negative":
         action = "NEGATIVE ALERT → Escalate immediately"
@@ -103,7 +90,7 @@ def predict_sentiment(message, threshold):
         action = "NEUTRAL → Standard handling"
     else:
         action = "LOW CONFIDENCE → Human review recommended"
-    
+
     return sentiment, confidence, auto, action
 
 # ------------------------- TABS -------------------------
@@ -119,7 +106,6 @@ with tab1:
             "Customer Message",
             placeholder="Paste ticket, email, chat or tweet here...",
             height=220,
-            key="msg",
             label_visibility="collapsed"
         )
     with col2:
@@ -139,12 +125,12 @@ with tab1:
                 if result:
                     sentiment, conf, auto, action = result
                     save_and_log(message, sentiment, conf, action)
-                    
+
                     st.success("Analysis Complete!")
                     color = "red" if sentiment == "negative" else "orange" if sentiment == "neutral" else "green"
                     st.markdown(f"## <span style='color:{color}'>{sentiment.upper()} ({conf:.1%} confidence)</span>", unsafe_allow_html=True)
                     st.markdown(f"### {action}")
-                    
+
                     if auto and sentiment == "negative":
                         st.error("NEGATIVE SENTIMENT DETECTED — Consider immediate escalation!")
                         components.html("<script>alert('Negative sentiment detected!');</script>", height=0)
@@ -152,24 +138,34 @@ with tab1:
                         st.success("POSITIVE SENTIMENT — Great customer experience!")
                         st.balloons()
 
+# ------------------------- HISTORY TAB — FULL PERSISTENT LOG -------------------------
 with tab2:
     st.header("Detection History")
-    if st.session_state.history:
-        st.dataframe(pd.DataFrame(st.session_state.history), use_container_width=True, hide_index=True)
-        
+    log_df = safe_read_log()
+    if len(log_df) > 0:
+        display_df = log_df.copy()
+        display_df["Time"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%H:%M")
+        display_df = display_df[["Time", "message_snippet", "sentiment", "confidence", "action"]]
+        display_df["sentiment"] = display_df["sentiment"].str.upper()
+        display_df["confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
+        display_df["Action"] = display_df["action"].str.split(" → ").str[0]
+        display_df["Message"] = display_df["message_snippet"].str[:60] + "..."
+        display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
+        display_df = display_df.sort_values("timestamp", ascending=False)
+
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
         with st.expander("Admin Tools (protected)", expanded=False):
-            pwd = st.text_input("Admin password", type="password")
+            pwd = st.text_input("Admin password", type="password", key="admin_pwd")
             if pwd == st.secrets.get("ADMIN_PASSWORD", "___NEVER___"):
                 st.success("Authorized")
-                log_df = safe_read_log()
-                if len(log_df) > 0:
-                    csv = log_df.to_csv(index=False).encode()
-                    st.download_button(
-                        "📥 Download full log (CSV)",
-                        csv,
-                        f"sentiment_log_{datetime.now(WAT).strftime('%Y%m%d')}.csv",
-                        "text/csv"
-                    )
+                csv = log_df.to_csv(index=False).encode()
+                st.download_button(
+                    "📥 Download full log (CSV)",
+                    csv,
+                    f"sentiment_log_{datetime.now(WAT).strftime('%Y%m%d')}.csv",
+                    "text/csv"
+                )
             elif pwd and pwd != st.secrets.get("ADMIN_PASSWORD", "___NEVER___"):
                 st.error("Wrong password")
     else:
@@ -180,9 +176,8 @@ with st.sidebar:
     st.image("https://em-content.zobj.net/source/skype/289/heart_2764.png", width=100)
     st.title("Sentiment Detector")
     st.caption("79.3% Accuracy • 93.7% on high-confidence")
-    log_df = safe_read_log()
-    st.metric("Total Analyzed (all time)", len(log_df))
-    st.metric("This session", len(st.session_state.history))
+    total_logs = len(safe_read_log())
+    st.metric("Total Analyzed (all time)", total_logs)
     st.divider()
     st.info("Flags negative sentiment early → prevents churn\nCelebrates positive → boosts morale")
 
