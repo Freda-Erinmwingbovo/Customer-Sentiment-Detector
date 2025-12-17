@@ -6,8 +6,8 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import pickle
 import os
+import numpy as np
 from datetime import datetime, timezone, timedelta
 import streamlit.components.v1 as components
 
@@ -21,15 +21,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# ------------------------- MODEL & CLEAN_TEXT LOADING -------------------------
+# ------------------------- MODEL LOADING -------------------------
 @st.cache_resource
-def load_sentiment_tools():
+def load_sentiment_model():
     model = joblib.load("sentiment_classifier_PROD.pkl")
-    with open("clean_text_func.pkl", "rb") as f:
-        clean_text = pickle.load(f)
-    return model, clean_text
+    return model
 
-model, clean_text = load_sentiment_tools()
+model = load_sentiment_model()
+
+# ------------------------- CLEAN_TEXT FUNCTION (DIRECTLY DEFINED) -------------------------
+def clean_text(t):
+    if pd.isna(t):
+        return ""
+    t = str(t).lower()
+    t = re.sub(r"[^a-z0-9\s]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    stop_words = {
+        "a", "an", "the", "and", "or", "is", "are", "was", "were", "in", "on", "at", "to", "for", "with", "of",
+        "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his",
+        "her", "its", "our", "their", "from", "as", "by", "be", "been", "am", "will", "can", "do", "does",
+        "did", "have", "has", "had", "not", "but", "if", "then", "so", "no", "yes"
+    }
+    return " ".join(w for w in t.split() if w not in stop_words)
 
 # ------------------------- SESSION STATE & LOGGING -------------------------
 if "history" not in st.session_state:
