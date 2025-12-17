@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — Customer Sentiment & Emotion Detector (App #2)
+# app.py — Customer Sentiment & Emotion Detector (App #2) — FINAL BEST VERSION
 # Part of AI-Powered Customer Support Automation Suite
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
@@ -145,11 +145,12 @@ with tab2:
     if len(log_df) > 0:
         display_df = log_df.copy()
         display_df["Time"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%H:%M")
-        display_df = display_df[["Time", "message_snippet", "sentiment", "confidence", "action"]]
-        display_df["sentiment"] = display_df["sentiment"].str.upper()
-        display_df["confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
+        display_df["Sentiment"] = display_df["sentiment"].str.upper()
+        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
         display_df["Action"] = display_df["action"].str.split(" → ").str[0]
-        display_df["Message"] = display_df["message_snippet"].str[:60] + "..."
+        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(x) > 60 else x)
+        
+        # Reorder and select columns in correct order
         display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
         display_df = display_df.sort_values("timestamp", ascending=False)
 
