@@ -150,9 +150,9 @@ with tab2:
         display_df["Action"] = display_df["action"].str.split(" → ").str[0]
         display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(x) > 60 else x)
         
-        # Reorder and select columns in correct order
+        # Reorder columns and sort by timestamp (now guaranteed to exist)
         display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
-        display_df = display_df.sort_values("timestamp", ascending=False)
+        display_df = display_df.sort_values(by="timestamp", ascending=False)
 
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
