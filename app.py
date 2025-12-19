@@ -1,6 +1,6 @@
 # ============================================================
-# app.py — Customer Sentiment & Emotion Detector (App #2) — FINAL BEST VERSION
-# Part of AI-Powered Customer Support Automation Suite
+# app.py — Customer Sentiment & Emotion Detector (App #2 v2)
+# Negation-Aware • Improved Accuracy • Production Ready
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
 import streamlit as st
@@ -25,22 +25,45 @@ st.set_page_config(
 # ------------------------- MODEL LOADING -------------------------
 @st.cache_resource
 def load_sentiment_model():
-    return joblib.load("sentiment_classifier_PROD.pkl")
+    return joblib.load("sentiment_classifier_PROD_v2.pkl")
 
 model = load_sentiment_model()
 
-# ------------------------- CLEAN_TEXT FUNCTION -------------------------
-def clean_text(t):
+# ------------------------- NEGATION-AWARE CLEAN_TEXT (DIRECT) -------------------------
+def clean_text_negation(t):
     if pd.isna(t):
         return ""
     t = str(t).lower()
     t = re.sub(r"[^a-z0-9\s]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
+    
+    words = t.split()
+    negation = False
+    negation_triggers = {"not", "no", "never", "n't", "none", "nobody", "nothing", "nowhere", "hardly", "barely"}
+    sentence_enders = {".", "!", "?", ":", ";", "but", "however", "although"}
+    strong_negative_words = {
+        "problem", "issue", "bad", "worst", "terrible", "hate", "angry", "frustrated", "disappointed",
+        "slow", "broken", "fail", "error", "bug", "crash", "horrible", "awful", "rude", "delay", "cancel"
+    }
+    
+    tagged_words = []
+    for word in words:
+        if word in negation_triggers:
+            negation = True
+        elif word in sentence_enders:
+            negation = False
+        
+        if negation and word in strong_negative_words:
+            word = f"NEG_{word}"
+        
+        tagged_words.append(word)
+    
+    t = " ".join(tagged_words)
+    
     stop_words = {
-        "a", "an", "the", "and", "or", "is", "are", "was", "were", "in", "on", "at", "to", "for", "with", "of",
-        "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his",
-        "her", "its", "our", "their", "from", "as", "by", "be", "been", "am", "will", "can", "do", "does",
-        "did", "have", "has", "had", "not", "but", "if", "then", "so", "no", "yes"
+        "a","an","the","and","or","is","are","was","were","in","on","at","to","for","with","of","this","that","these","those",
+        "i","you","he","she","it","we","they","my","your","his","her","its","our","their","from","as","by","be","been","am",
+        "will","can","do","does","did","have","has","had","not","but","if","then","so","no","yes"
     }
     return " ".join(w for w in t.split() if w not in stop_words)
 
@@ -74,7 +97,7 @@ def predict_sentiment(message, threshold):
     if not message.strip():
         return None
 
-    cleaned = clean_text(message)
+    cleaned = clean_text_negation(message)
     decision_scores = model.decision_function([cleaned])
     exp_scores = np.exp(decision_scores - decision_scores.max())
     proba = exp_scores / exp_scores.sum()
@@ -97,8 +120,8 @@ def predict_sentiment(message, threshold):
 tab1, tab2 = st.tabs(["Detector", "History"])
 
 with tab1:
-    st.title("❤️ Customer Sentiment & Emotion Detector")
-    st.markdown("*Detect anger early • Celebrate happiness • Stay safe on neutral*")
+    st.title("❤️ Customer Sentiment & Emotion Detector v2")
+    st.markdown("*Negation-aware • Handles 'never had a problem' correctly • Safer & Smarter*")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -142,18 +165,15 @@ with tab1:
 with tab2:
     st.header("Detection History")
     log_df = safe_read_log()
-    if len(log_df) > 0 and "timestamp" in log_df.columns:
+    if len(log_df) > 0:
         display_df = log_df.copy()
         display_df["Time"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%H:%M")
         display_df["Sentiment"] = display_df["sentiment"].str.upper()
-        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}" if pd.notna(x) else "N/A")
+        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
         display_df["Action"] = display_df["action"].str.split(" → ").str[0]
-        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(str(x)) > 60 else str(x))
+        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(x) > 60 else x)
         
-        # Sort by timestamp BEFORE selecting columns
         display_df = display_df.sort_values(by="timestamp", ascending=False)
-        
-        # Now select display columns
         display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
 
         st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -177,8 +197,8 @@ with tab2:
 # ------------------------- SIDEBAR -------------------------
 with st.sidebar:
     st.image("https://em-content.zobj.net/source/skype/289/heart_2764.png", width=100)
-    st.title("Sentiment Detector")
-    st.caption("79.3% Accuracy • 93.7% on high-confidence")
+    st.title("Sentiment Detector v2")
+    st.caption("Negation-Aware • Handles 'never had a problem'")
     total_logs = len(safe_read_log())
     st.metric("Total Analyzed (all time)", total_logs)
     st.divider()
