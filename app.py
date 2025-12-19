@@ -1,6 +1,6 @@
 # ============================================================
-# app.py — Customer Sentiment & Emotion Detector (App #2 v3 — Final)
-# IMDB-Powered • Negation-Aware • Production Ready
+# app.py — Customer Sentiment & Emotion Detector (Final Production Version)
+# Support-Specific • Negation-Aware • Production Ready
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
 import streamlit as st
@@ -25,12 +25,12 @@ st.set_page_config(
 # ------------------------- MODEL LOADING -------------------------
 @st.cache_resource
 def load_sentiment_model():
-    return joblib.load("sentiment_classifier_imdb_final.pkl")
+    return joblib.load("sentiment_classifier_support_final.pkl")
 
 model = load_sentiment_model()
 
-# ------------------------- FINAL NEGATION-AWARE CLEAN_TEXT -------------------------
-def clean_text_final(t):
+# ------------------------- FINAL SUPPORT-SPECIFIC CLEAN_TEXT -------------------------
+def clean_text_support(t):
     if pd.isna(t):
         return ""
     t = str(t).lower()
@@ -65,7 +65,6 @@ def clean_text_final(t):
     t = t.replace("i'd", "i would")
     
     # Basic cleaning
-    t = re.sub(r"<br />", " ", t)
     t = re.sub(r"[^a-z0-9\s]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     
@@ -73,13 +72,15 @@ def clean_text_final(t):
     words = t.split()
     negation = False
     negation_triggers = {"not", "no", "never", "none", "nobody", "nothing", "nowhere", "neither", "nor", "hardly", "barely", "scarcely", "rarely", "seldom"}
-    sentence_enders = {".", "!", "?", ":", ";", "but", "however", "although", "yet", "though", "still"}
+    sentence_enders = {".", "!", "?", ":", ";"}  # No "but" reset
+    
+    # Strong negative words in support context (always NEG_)
     strong_negative_words = {
         "bad", "worst", "terrible", "awful", "hate", "boring", "waste", "disappointing", "poor", "problem",
         "horrible", "stupid", "dull", "rubbish", "crap", "trash", "fail", "lame", "weak", "mess", "sucks",
         "annoying", "ridiculous", "pointless", "crappy", "garbage", "ugly", "slow", "broken", "error", "bug",
         "crash", "disaster", "nightmare", "pain", "hurt", "sad", "angry", "mad", "frustrated", "issue", "issues",
-        "complain"
+        "complain", "delay", "cancel", "rude", "lost", "charge", "overcharge", "debit", "overbilling"
     }
     
     tagged_words = []
@@ -89,8 +90,8 @@ def clean_text_final(t):
         elif word in sentence_enders:
             negation = False
         
-        if negation and word in strong_negative_words:
-            word = f"NEG_{word}"
+        if word in strong_negative_words:
+            word = f"NEG_{word}"  # Always tag as NEG in support context
         
         tagged_words.append(word)
     
@@ -100,7 +101,7 @@ def clean_text_final(t):
     stop_words = {
         "a","an","the","and","or","is","are","was","were","in","on","at","to","for","with","of","this","that","these","those",
         "i","you","he","she","it","we","they","my","your","his","her","its","our","their","from","as","by","be","been","am",
-        "will","can","do","does","did","have","has","had","not","but","if","then","so","no","yes", "br"
+        "will","can","do","does","did","have","has","had","not","but","if","then","so","no","yes"
     }
     return " ".join(w for w in t.split() if w not in stop_words)
 
@@ -134,7 +135,7 @@ def predict_sentiment(message, threshold):
     if not message.strip():
         return None
 
-    cleaned = clean_text_final(message)
+    cleaned = clean_text_support(message)
     proba = model.predict_proba([cleaned])[0]
     confidence = float(proba.max())
     sentiment = model.classes_[proba.argmax()]
@@ -155,8 +156,8 @@ def predict_sentiment(message, threshold):
 tab1, tab2 = st.tabs(["Detector", "History"])
 
 with tab1:
-    st.title("❤️ Customer Sentiment & Emotion Detector v3")
-    st.markdown("*IMDB-Powered • Negation-Aware • 89.7% Accuracy • Handles 'never had a problem' perfectly*")
+    st.title("❤️ Customer Sentiment & Emotion Detector")
+    st.markdown("*Support-Specific • Real Customer Language • Production Ready*")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -232,8 +233,8 @@ with tab2:
 # ------------------------- SIDEBAR -------------------------
 with st.sidebar:
     st.image("https://em-content.zobj.net/source/skype/289/heart_2764.png", width=100)
-    st.title("Sentiment Detector v3")
-    st.caption("IMDB-Powered • 89.7% Accuracy • Negation-Aware")
+    st.title("Sentiment Detector")
+    st.caption("Support-Specific • Production Ready")
     total_logs = len(safe_read_log())
     st.metric("Total Analyzed (all time)", total_logs)
     st.divider()
