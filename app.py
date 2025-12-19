@@ -136,10 +136,21 @@ def predict_sentiment(message, threshold):
         return None
 
     cleaned = clean_text_support(message)
-    proba = model.predict_proba([cleaned])[0]
-    confidence = float(proba.max())
-    sentiment = model.classes_[proba.argmax()]
-
+    
+    # Get prediction
+    sentiment = model.predict([cleaned])[0]
+    
+    # Get confidence (handle both Logistic and SVM)
+    if hasattr(model, "predict_proba"):
+        proba = model.predict_proba([cleaned])[0]
+        confidence = float(proba.max())
+    else:  # LinearSVC
+        decision = model.decision_function([cleaned])
+        # Convert to probability-like confidence
+        exp = np.exp(decision - decision.max())
+        proba = exp / exp.sum()
+        confidence = float(proba.max())
+    
     auto = confidence >= threshold
     if auto and sentiment == "negative":
         action = "NEGATIVE ALERT → Escalate immediately"
@@ -151,6 +162,7 @@ def predict_sentiment(message, threshold):
         action = "LOW CONFIDENCE → Human review recommended"
 
     return sentiment, confidence, auto, action
+
 
 # ------------------------- TABS -------------------------
 tab1, tab2 = st.tabs(["Detector", "History"])
