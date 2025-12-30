@@ -1,16 +1,15 @@
 # ============================================================
 # app.py — Customer Sentiment & Emotion Detector (Final Production Version)
-# Support-Specific • Negation-Aware • Production Ready
+# DistilBERT Fine-Tuned • Hosted on Hugging Face Hub
 # Built by Freda Erinmwingbovo • Abuja, Nigeria • December 2025
 # ============================================================
 import streamlit as st
-import pandas as pd
-import joblib
-import os
-import numpy as np
+from transformers import pipeline
 import re
 from datetime import datetime, timezone, timedelta
 import streamlit.components.v1 as components
+import pandas as pd
+import os
 
 # ------------------------- NIGERIA TIME -------------------------
 WAT = timezone(timedelta(hours=1))
@@ -22,102 +21,61 @@ st.set_page_config(
     layout="wide"
 )
 
-# ------------------------- MODEL LOADING -------------------------
+# ------------------------- MODEL LOADING FROM HF HUB -------------------------
 @st.cache_resource
 def load_sentiment_model():
-    return joblib.load("sentiment_classifier_support_final.pkl")
+    # Your model on HF Hub
+    return pipeline("text-classification", model="FredaErins/support-sentiment-distilbert")
 
 model = load_sentiment_model()
 
-# ------------------------- FINAL SUPPORT-SPECIFIC CLEAN_TEXT -------------------------
-def clean_text_support(t):
-    if pd.isna(t):
+# ------------------------- MINIMAL CLEANING (DistilBERT handles context) -------------------------
+def clean_text(message):
+    if not message:
         return ""
-    t = str(t).lower()
-    
-    # Expand contractions
-    contractions = {
-        "can't": "can not", "cannot": "can not",
-        "won't": "will not",
-        "shan't": "shall not",
-        "don't": "do not", "dont": "do not",
-        "doesn't": "does not",
-        "didn't": "did not",
-        "isn't": "is not",
-        "aren't": "are not",
-        "wasn't": "was not",
-        "weren't": "were not",
-        "haven't": "have not",
-        "hasn't": "has not",
-        "hadn't": "had not",
-        "couldn't": "could not",
-        "shouldn't": "should not",
-        "wouldn't": "would not",
-        "mightn't": "might not",
-        "mustn't": "must not"
-    }
-    for contr, exp in contractions.items():
-        t = t.replace(contr, exp)
-    
-    t = t.replace("i've", "i have")
-    t = t.replace("i'm", "i am")
-    t = t.replace("i'll", "i will")
-    t = t.replace("i'd", "i would")
-    
-    # Basic cleaning
-    t = re.sub(r"[^a-z0-9\s]", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    
-    # Negation tagging
-    words = t.split()
-    negation = False
-    negation_triggers = {"not", "no", "never", "none", "nobody", "nothing", "nowhere", "neither", "nor", "hardly", "barely", "scarcely", "rarely", "seldom"}
-    sentence_enders = {".", "!", "?", ":", ";"}
-    
-    strong_negative_words = {
-        "bad", "worst", "terrible", "awful", "hate", "boring", "waste", "disappointing", "poor", "problem",
-        "horrible", "stupid", "dull", "rubbish", "crap", "trash", "fail", "lame", "weak", "mess", "sucks",
-        "annoying", "ridiculous", "pointless", "crappy", "garbage", "ugly", "slow", "broken", "error", "bug",
-        "crash", "disaster", "nightmare", "pain", "hurt", "sad", "angry", "mad", "frustrated", "issue", "issues",
-        "complain", "delay", "cancel", "rude", "lost", "charge", "overcharge", "debit", "overbilling"
-    }
-    
-    tagged_words = []
-    for word in words:
-        if word in negation_triggers:
-            negation = True
-        elif word in sentence_enders:
-            negation = False
-        
-        if word in strong_negative_words:
-            word = f"NEG_{word}"
-        
-        tagged_words.append(word)
-    
-    t = " ".join(tagged_words)
-    
-    stop_words = {
-        "a","an","the","and","or","is","are","was","were","in","on","at","to","for","with","of","this","that","these","those",
-        "i","you","he","she","it","we","they","my","your","his","her","its","our","their","from","as","by","be","been","am",
-        "will","can","do","does","did","have","has","had","not","but","if","then","so","no","yes"
-    }
-    return " ".join(w for w in t.split() if w not in stop_words)
+    message = str(message).lower()
+    message = re.sub(r"<br />", " ", message)
+    message = re.sub(r"[^a-z0-9\s]", " ", message)
+    message = re.sub(r"\s+", " ", message).strip()
+    return message
 
-# ------------------------- PREDICTION FUNCTION (Fixed for SVM) -------------------------
+# ------------------------- LOGGING SETUP -------------------------
+LOG_FILE = "data/sentiment_log.csv"
+os.makedirs("data", exist_ok=True)
+
+def safe_read_log():
+    if not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0:
+        return pd.DataFrame(columns=["timestamp", "message_snippet", "sentiment", "confidence", "action"])
+    try:
+        return pd.read_csv(LOG_FILE)
+    except:
+        return pd.DataFrame(columns=["timestamp", "message_snippet", "sentiment", "confidence", "action"])
+
+def save_and_log(message, sentiment, confidence, action):
+    now = datetime.now(WAT)
+    log_df = safe_read_log()
+    new_row = pd.DataFrame([{
+        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "message_snippet": message[:100],
+        "sentiment": sentiment,
+        "confidence": round(confidence, 4),
+        "action": action
+    }])
+    log_df = pd.concat([log_df, new_row], ignore_index=True)
+    log_df.to_csv(LOG_FILE, index=False)
+
+# ------------------------- PREDICTION FUNCTION -------------------------
 def predict_sentiment(message, threshold):
     if not message.strip():
         return None
 
-    cleaned = clean_text_support(message)
+    cleaned = clean_text(message)
+    result = model(cleaned)[0]
     
-    sentiment = model.predict([cleaned])[0]
-    
-    # Confidence — handle Linear SVM
-    decision = model.decision_function([cleaned])
-    exp = np.exp(decision - decision.max())
-    proba = exp / exp.sum()
-    confidence = float(proba.max())
-    
+    label = result['label']
+    sentiment = "negative" if label == "LABEL_0" else "neutral" if label == "LABEL_1" else "positive"
+    confidence = result['score']
+
     auto = confidence >= threshold
     if auto and sentiment == "negative":
         action = "NEGATIVE ALERT → Escalate immediately"
@@ -130,7 +88,101 @@ def predict_sentiment(message, threshold):
 
     return sentiment, confidence, auto, action
 
-# ------------------------- REST OF THE APP (same as before) -------------------------
-# (keep your current tabs, history, sidebar, footer — only the prediction function and model load changed)
+# ------------------------- TABS -------------------------
+tab1, tab2 = st.tabs(["Detector", "History"])
 
-# ... (rest of your app code — tabs, history, sidebar, footer)
+with tab1:
+    st.title("❤️ Customer Sentiment & Emotion Detector")
+    st.markdown("*DistilBERT Fine-Tuned • Production Ready • Hosted on Hugging Face*")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        message = st.text_area(
+            "Customer Message",
+            placeholder="Paste ticket, email, chat or tweet here...",
+            height=220,
+            label_visibility="collapsed"
+        )
+    with col2:
+        st.markdown("### Settings")
+        threshold = st.slider(
+            "Confidence Threshold",
+            0.50, 0.95, 0.70, 0.05,
+            help="Higher = safer (fewer auto-detections)"
+        )
+
+    if st.button("ANALYZE SENTIMENT", type="primary", use_container_width=True):
+        if not message.strip():
+            st.warning("Please enter a customer message")
+        else:
+            with st.spinner("Analyzing emotion..."):
+                result = predict_sentiment(message, threshold)
+                if result:
+                    sentiment, conf, auto, action = result
+                    save_and_log(message, sentiment, conf, action)
+
+                    st.success("Analysis Complete!")
+                    color = "red" if sentiment == "negative" else "orange" if sentiment == "neutral" else "green"
+                    st.markdown(f"## <span style='color:{color}'>{sentiment.upper()} ({conf:.1%} confidence)</span>", unsafe_allow_html=True)
+                    st.markdown(f"### {action}")
+
+                    if auto and sentiment == "negative":
+                        st.error("NEGATIVE SENTIMENT DETECTED — Consider immediate escalation!")
+                        components.html("<script>alert('Negative sentiment detected!');</script>", height=0)
+                    elif auto and sentiment == "positive":
+                        st.success("POSITIVE SENTIMENT — Great customer experience!")
+                        st.balloons()
+
+# ------------------------- HISTORY TAB -------------------------
+with tab2:
+    st.header("Detection History")
+    log_df = safe_read_log()
+    if len(log_df) > 0:
+        display_df = log_df.copy()
+        display_df["Time"] = pd.to_datetime(display_df["timestamp"]).dt.strftime("%H:%M")
+        display_df["Sentiment"] = display_df["sentiment"].str.upper()
+        display_df["Confidence"] = display_df["confidence"].apply(lambda x: f"{float(x):.1%}")
+        display_df["Action"] = display_df["action"].str.split(" → ").str[0]
+        display_df["Message"] = display_df["message_snippet"].apply(lambda x: x[:60] + "..." if len(x) > 60 else x)
+        
+        display_df = display_df.sort_values(by="timestamp", ascending=False)
+        display_df = display_df[["Time", "Message", "Sentiment", "Confidence", "Action"]]
+
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        with st.expander("Admin Tools (protected)", expanded=False):
+            pwd = st.text_input("Admin password", type="password", key="admin_pwd")
+            if pwd == st.secrets.get("ADMIN_PASSWORD", "___NEVER___"):
+                st.success("Authorized")
+                csv = log_df.to_csv(index=False).encode()
+                st.download_button(
+                    "📥 Download full log (CSV)",
+                    csv,
+                    f"sentiment_log_{datetime.now(WAT).strftime('%Y%m%d')}.csv",
+                    "text/csv"
+                )
+            elif pwd and pwd != st.secrets.get("ADMIN_PASSWORD", "___NEVER___"):
+                st.error("Wrong password")
+    else:
+        st.info("No analyses yet → go to **Detector** tab!")
+
+# ------------------------- SIDEBAR -------------------------
+with st.sidebar:
+    st.image("https://em-content.zobj.net/source/skype/289/heart_2764.png", width=100)
+    st.title("Sentiment Detector")
+    st.caption("DistilBERT Fine-Tuned • Production Ready")
+    total_logs = len(safe_read_log())
+    st.metric("Total Analyzed (all time)", total_logs)
+    st.divider()
+    st.info("Flags negative sentiment early → prevents churn\nCelebrates positive → boosts morale")
+
+# ------------------------- FOOTER -------------------------
+st.markdown(
+    """
+    <hr style="border-top: 1px solid #444;">
+    <p style="text-align: center; color: #aaa; font-size: 15px;">
+    Built solo by <strong>Freda Erinmwingbovo</strong> • Abuja, Nigeria • December 2025
+    </p>
+    """,
+    unsafe_allow_html=True
+)
