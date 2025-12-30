@@ -1,6 +1,7 @@
 streamlit
 pandas
-joblib
-scikit-learn
 numpy
-
+torch>=2.0.0
+transformers>=4.30.0
+huggingface-hub>=0.16.0
+accelerate>=0.26.0
